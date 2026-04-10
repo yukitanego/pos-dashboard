@@ -137,12 +137,33 @@ function genInsights(products){
   return {overview:ov.slice(0,5),tab:tab.slice(0,6)};
 }
 
+// --- Japanese holiday calculation ---
+function getHolidaySet(dateKeys,extra){
+  var years={};
+  for(var i=0;i<dateKeys.length;i++) years[dateKeys[i].slice(0,4)]=true;
+  var h={};
+  function nthMon(yr,m,n){var d=new Date(yr,m,1);return 1+(8-d.getDay())%7+7*(n-1)}
+  function pad(n){return n<10?'0'+n:''+n}
+  for(var y in years){
+    var yr=+y;
+    // Fixed national holidays
+    var fx=[y+'0101',y+'0211',y+'0223',y+'0320',y+'0429',y+'0503',y+'0504',y+'0505',y+'0811',y+'0923',y+'1103',y+'1123'];
+    for(var j=0;j<fx.length;j++) h[fx[j]]=true;
+    // Happy Monday: 海の日(Jul 3rd Mon), 敬老の日(Sep 3rd Mon), スポーツの日(Oct 2nd Mon)
+    h[y+'07'+pad(nthMon(yr,6,3))]=true;
+    h[y+'09'+pad(nthMon(yr,8,3))]=true;
+    h[y+'10'+pad(nthMon(yr,9,2))]=true;
+  }
+  if(extra){for(var i=0;i<extra.length;i++) h[extra[i]]=true}
+  return h;
+}
+
 // --- Weekend/holiday detection ---
-function buildWeekendFlags(dateKeys){
+function buildWeekendFlags(dateKeys,holidaySet){
   return dateKeys.map(function(d){
     var dt=new Date(+d.slice(0,4),+d.slice(4,6)-1,+d.slice(6));
     var wd=dt.getDay();
-    return wd===0||wd===6;
+    return wd===0||wd===6||!!holidaySet[d];
   });
 }
 function buildDateLabels(dateKeys,isWeekend){
@@ -213,7 +234,7 @@ function drawAxisBar(id,axisData,color){
     ]},
     options:{indexAxis:'y',responsive:true,
       plugins:{legend:{labels:{font:{size:10}}},
-        tooltip:{callbacks:{label:function(c){var d=axisData[c.dataIndex];return c.dataset.label+': '+fmt.yen(c.raw)+(d.prev>0?' (\u524d\u671f\u6bd4'+(d.sales/d.prev*100).toFixed(1)+'%)':'')}}}
+        tooltip:{callbacks:{label:function(c){var d=axisData[c.dataIndex];return c.dataset.label+': '+fmt.yen(c.raw)+' (\u524d\u671f\u6bd4'+(d.prev>0?(d.sales/d.prev*100).toFixed(1)+'%':'NEW')+')'}}}
       },
       scales:{x:{ticks:{callback:function(v){return fmt.man(v)}}}}
     }
@@ -406,7 +427,7 @@ function buildHTML(data){
 
   // Cat A tab
   h+='<div id="tab-catA" class="tab-content">';
-  h+='<div class="grid grid-cols-4 gap-3 mb-4" id="kpiCatATab"></div>';
+  h+='<div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4" id="kpiCatATab"></div>';
   h+='<div class="bg-blue-50 border-l-4 border-blue-500 rounded-r-lg p-4 mb-4">';
   h+='<h4 class="text-sm font-bold text-blue-900 mb-2">'+ca+' \u5358\u54c1\u5206\u6790\u30a4\u30f3\u30b5\u30a4\u30c8</h4>';
   h+='<ul class="text-sm text-blue-800 space-y-1 list-disc pl-5" id="insTabA">'+insHTML(insA.tab)+'</ul></div>';
@@ -426,7 +447,7 @@ function buildHTML(data){
   if(hasCatB){
     // Cat B tab
     h+='<div id="tab-catB" class="tab-content">';
-    h+='<div class="grid grid-cols-4 gap-3 mb-4" id="kpiCatBTab"></div>';
+    h+='<div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4" id="kpiCatBTab"></div>';
     h+='<div class="bg-emerald-50 border-l-4 border-emerald-500 rounded-r-lg p-4 mb-4">';
     h+='<h4 class="text-sm font-bold text-emerald-900 mb-2">'+cb+' \u5358\u54c1\u5206\u6790\u30a4\u30f3\u30b5\u30a4\u30c8</h4>';
     h+='<ul class="text-sm text-emerald-800 space-y-1 list-disc pl-5" id="insTabB">'+insHTML(insB.tab)+'</ul></div>';
@@ -493,7 +514,8 @@ POS.render=function(selector,data){
   // Daily data processing
   var daily=data.daily||{};
   var dateKeys=Object.keys(daily).sort();
-  var isWeekend=buildWeekendFlags(dateKeys);
+  var holidaySet=getHolidaySet(dateKeys,data.holidays);
+  var isWeekend=buildWeekendFlags(dateKeys,holidaySet);
   var dateLabels=buildDateLabels(dateKeys,isWeekend);
   var nDays=dateKeys.length;
 
